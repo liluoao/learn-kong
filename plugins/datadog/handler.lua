@@ -37,6 +37,7 @@ local metrics = {
     local fmt = string_format("%s.request.status", api_name,
                        message.response.status)
 
+    -- 调用 statsd_logger 中的 statsd_message
     logger:send_statsd(string_format("%s.%s", fmt, message.response.status),
                        1, logger.stat_types.counter,
                        metric_config.sample_rate, metric_config.tags)
