@@ -139,6 +139,9 @@ local function load_plugins(kong_conf, dao)
   end
 
   -- sort plugins by order of execution
+  -- 每个插件中都会指定自己的权重
+  -- 如限流插件中：RateLimitingHandler.PRIORITY = 901
+  -- 这里按权重重新排序
   table.sort(sorted_plugins, function(a, b)
     local priority_a = a.handler.PRIORITY or 0
     local priority_b = b.handler.PRIORITY or 0
@@ -334,7 +337,7 @@ function Kong.init_worker()
 
 
   -- run plugins init_worker context
-
+  -- 插件 启动（继承的基类中的方法，部分插件自己重写了）
 
   for _, plugin in ipairs(loaded_plugins) do
     kong_global.set_namespaced_log(kong, plugin.name)
@@ -546,6 +549,7 @@ function Kong.log()
     kong_global.set_named_ctx(kong, "plugin", plugin_conf)
     kong_global.set_namespaced_log(kong, plugin.name)
 
+    -- 此处为每个插件中使用的 conf
     plugin.handler:log(plugin_conf)
 
     kong_global.reset_log(kong)
