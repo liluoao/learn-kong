@@ -12,6 +12,7 @@ local NGX_ERR       = ngx.ERR
 
 
 local DatadogHandler    = BasePlugin:extend()
+-- 优先级低
 DatadogHandler.PRIORITY = 10
 DatadogHandler.VERSION = "0.1.0"
 
@@ -32,12 +33,15 @@ local get_consumer_id = {
 }
 
 
+-- 定义了4种需要特殊处理的统计
+-- 涉及到消费者与计数
 local metrics = {
   status_count = function (api_name, message, metric_config, logger)
     local fmt = string_format("%s.request.status", api_name,
                        message.response.status)
 
     -- 调用 statsd_logger 中的 statsd_message
+    -- logger.stat_types.counter 等于 c
     logger:send_statsd(string_format("%s.%s", fmt, message.response.status),
                        1, logger.stat_types.counter,
                        metric_config.sample_rate, metric_config.tags)
@@ -56,6 +60,7 @@ local metrics = {
     if consumer_id then
       local stat = string_format("%s.user.uniques", api_name)
 
+      -- logger.stat_types.set 等于 s
       logger:send_statsd(stat, consumer_id, logger.stat_types.set,
                          nil, metric_config.tags)
     end
@@ -68,6 +73,7 @@ local metrics = {
     if consumer_id then
       local stat = string_format("%s.user.%s.request.count", api_name, consumer_id)
 
+      -- logger.stat_types.counter 等于 c
       logger:send_statsd(stat, 1, logger.stat_types.counter,
                          metric_config.sample_rate, metric_config.tags)
     end
@@ -79,6 +85,7 @@ local metrics = {
     if consumer_id then
       local fmt = string_format("%s.user.%s.request.status", api_name, consumer_id)
 
+      -- logger.stat_types.counter 等于 c
       logger:send_statsd(string_format("%s.%s", fmt, message.response.status),
                          1, logger.stat_types.counter,
                          metric_config.sample_rate, metric_config.tags)
@@ -119,6 +126,8 @@ local function log(premature, conf, message)
     return
   end
 
+  -- 除了上面4种之外的统计名
+  -- 处理比较简单
   local stat_name  = {
     request_size     = name .. ".request.size",
     response_size    = name .. ".response.size",
@@ -127,6 +136,7 @@ local function log(premature, conf, message)
     kong_latency     = name .. ".kong_latency",
     request_count    = name .. ".request.count",
   }
+  -- 直接从请求中取值
   local stat_value = {
     request_size     = message.request.size,
     response_size    = message.response.size,
@@ -142,13 +152,18 @@ local function log(premature, conf, message)
     return
   end
 
+  -- 取出数据库配置中的 metrics
+  -- 是在新增本插件时手动加入的
   for _, metric_config in pairs(conf.metrics) do
+    -- 是否为上面配置的4种
     local metric = metrics[metric_config.name]
 
+    -- 是就直接是函数 发送
     if metric then
       metric(name, message, metric_config, logger)
 
     else
+      -- 否则统一转换后发送
       local stat_name  = stat_name[metric_config.name]
       local stat_value = stat_value[metric_config.name]
 
@@ -174,6 +189,7 @@ function DatadogHandler:log(conf)
     return
   end
 
+  -- 这个message直接是整个请求的序列化
   local message = basic_serializer.serialize(ngx)
 
   local ok, err = ngx_timer_at(0, log, conf, message)

@@ -8,6 +8,8 @@ local fmt            = string.format
 local tostring       = tostring
 
 
+-- 发送时的 kind 参数
+-- 单位
 local stat_types = {
   gauge     = "g",
   counter   = "c",
@@ -71,6 +73,9 @@ end
 function statsd_mt:send_statsd(stat, delta, kind, sample_rate, tags)
   local udp_message = statsd_message(self.prefix or "kong", stat,
                                      delta, kind, sample_rate, tags)
+
+  -- udp_message就是一条统计数据
+  -- 例子：rzzx.test-auth.request.count:1|c|#app:kong
 
   ngx_log(NGX_DEBUG, fmt("Sending data to statsd server: %s", udp_message))
 
