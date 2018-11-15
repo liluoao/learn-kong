@@ -34,22 +34,30 @@ local get_consumer_id = {
 
 
 -- 定义了4种需要特殊处理的统计
--- 涉及到消费者与计数
+-- 涉及到消费者与状态码
 local metrics = {
+  -- 状态码统计
   status_count = function (api_name, message, metric_config, logger)
     local fmt = string_format("%s.request.status", api_name,
                        message.response.status)
 
     -- 调用 statsd_logger 中的 statsd_message
-    -- logger.stat_types.counter 等于 c
+    -- 发送消息给Datadog配置的主机端口
+    -- stat_types 是取单位
+    -- 数字 1 是这里每次都是一次请求进来
     logger:send_statsd(string_format("%s.%s", fmt, message.response.status),
                        1, logger.stat_types.counter,
                        metric_config.sample_rate, metric_config.tags)
 
+    -- 上面是状态码单个信息 下面是状态码数量
+    -- 例子：xxx.request.status.200:1|c|#app:kong
+    -- 下面：xxx.request.status.total:1|c|#app:kong
+    -- 这里还没有拼上统一前缀
     logger:send_statsd(string_format("%s.%s", fmt, "total"), 1,
                        logger.stat_types.counter,
                        metric_config.sample_rate, metric_config.tags)
   end,
+  -- 唯一用户计数
   unique_users = function (api_name, message, metric_config, logger)
     -- 查找在配置中 unique_users 的身份标识是哪个字段 默认为 custom_id
     -- 取上面链表中对应属性
@@ -60,24 +68,25 @@ local metrics = {
     if consumer_id then
       local stat = string_format("%s.user.uniques", api_name)
 
-      -- logger.stat_types.set 等于 s
+      -- 例子：xxx.user.uniques:1|s|#app:kong
       logger:send_statsd(stat, consumer_id, logger.stat_types.set,
                          nil, metric_config.tags)
     end
   end,
+  -- 每个用户的请求数
   request_per_user = function (api_name, message, metric_config, logger)
-    -- 同理
     local get_consumer_id = get_consumer_id[metric_config.consumer_identifier]
     local consumer_id     = get_consumer_id(message.consumer)
 
     if consumer_id then
       local stat = string_format("%s.user.%s.request.count", api_name, consumer_id)
 
-      -- logger.stat_types.counter 等于 c
+      -- 例子：xxx.user.1.request.count:1|c|#app:kong
       logger:send_statsd(stat, 1, logger.stat_types.counter,
                          metric_config.sample_rate, metric_config.tags)
     end
   end,
+  -- 用户与状态码统计
   status_count_per_user = function (api_name, message, metric_config, logger)
     local get_consumer_id = get_consumer_id[metric_config.consumer_identifier]
     local consumer_id     = get_consumer_id(message.consumer)
@@ -85,11 +94,12 @@ local metrics = {
     if consumer_id then
       local fmt = string_format("%s.user.%s.request.status", api_name, consumer_id)
 
-      -- logger.stat_types.counter 等于 c
+      -- 例子：xxx.user.1.request.status.200:1|c|#app:kong
       logger:send_statsd(string_format("%s.%s", fmt, message.response.status),
                          1, logger.stat_types.counter,
                          metric_config.sample_rate, metric_config.tags)
 
+      -- 例子：xxx.user.1.request.status.total:1|c|#app:kong
       logger:send_statsd(string_format("%s.%s", fmt,  "total"),
                          1, logger.stat_types.counter,
                          metric_config.sample_rate, metric_config.tags)
