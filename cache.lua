@@ -134,7 +134,7 @@ function _M:get(key, opts, cb, ...)
 end
 
 
--- 判断存在
+-- 判断存在，返回的第3个是值
 function _M:probe(key)
   if type(key) ~= "string" then
     return error("key must be a string")
