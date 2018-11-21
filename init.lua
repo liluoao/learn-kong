@@ -319,12 +319,14 @@ function Kong.init_worker()
 
 
   -- LEGACY
+  -- 缓存的单例
   singletons.cache          = cache
   singletons.worker_events  = worker_events
   singletons.cluster_events = cluster_events
   -- /LEGACY
 
 
+  -- 使用缓存的另一种方法
   kong.cache = cache
   kong.worker_events = worker_events
   kong.cluster_events = cluster_events
