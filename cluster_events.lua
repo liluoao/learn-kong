@@ -19,6 +19,7 @@ local POLL_RUNNING_LOCK_KEY  = "cluster_events:poll_running"
 local CURRENT_AT_KEY         = "cluster_events:at"
 
 
+-- 最小延迟过期时间
 local MIN_EVENT_TTL_IN_DB = 60 * 60 -- 1 hour
 local PAGE_SIZE           = 100
 
@@ -62,12 +63,12 @@ function _M.new(opts)
 
   opts = opts or {}
 
-  -- 配置的db_update_frequency
+  -- db_update_frequency配置
   if opts.poll_interval and type(opts.poll_interval) ~= "number" then
     return error("opts.poll_interval must be a number")
   end
 
-  -- 配置的db_update_propagation
+  -- db_update_propagation配置
   if opts.poll_offset and type(opts.poll_offset) ~= "number" then
     return error("opts.poll_offset must be a number")
   end
@@ -100,6 +101,7 @@ function _M.new(opts)
                    dao_factory.db_type)
     end
 
+    -- 延迟过期时间，最小 1 hour
     local event_ttl_in_db = max(poll_offset * 10, MIN_EVENT_TTL_IN_DB)
 
     strategy = db_strategy.new(dao_factory, PAGE_SIZE, event_ttl_in_db)
