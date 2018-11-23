@@ -1,29 +1,4 @@
--- Kong, the biggest ape in town
---
---     /\  ____
---     <> ( oo )
---     <>_| ^^ |_
---     <>   @    \
---    /~~\ . . _ |
---   /~~~~\    | |
---  /~~~~~~\/ _| |
---  |[][][]/ / [m]
---  |[][][[m]
---  |[][][]|
---  |[][][]|
---  |[][][]|
---  |[][][]|
---  |[][][]|
---  |[][][]|
---  |[][][]|
---  |[][][]|
---  |[|--|]|
---  |[|  |]|
---  ========
--- ==========
--- |[[    ]]|
--- ==========
-
+-- 框架入口
 require "luarocks.loader"
 require "resty.core"
 local constants = require "kong.constants"
@@ -272,7 +247,15 @@ function Kong.init_worker()
 
   local cluster_events, err = kong_cluster_events.new {
     dao                     = kong.dao,
+    -- db_update_frequency ：该配置决定 kong 节点从数据库拉取缓存无效事件，
+    -- 同步任务执行的频率。一个更小的值意味着同步任务将会更频繁的执行，
+    -- kong 节点的缓存数据将保持和数据库更强的一致性。
+    -- 一个更大的值，意味着你的 kong 节点花更少的时间去处理同步任务，
+    -- 从而更加将更多资源集中去处理请求。
     poll_interval           = kong.configuration.db_update_frequency,
+    -- db_update_propagation ：如果你的数据库也是集群的并且最终一致性的（比如：Cassandra），你必须配置该值。
+    -- 它将确保db_update_propagation秒后，数据库节点间的变化在整个数据库集群中所有节点生效。
+    -- 当配置了该值，kong 节点从同步任务中接收无效事件，清除本地缓存将会延迟这么多秒。
     poll_offset             = kong.configuration.db_update_propagation,
   }
   if not cluster_events then
@@ -287,7 +270,12 @@ function Kong.init_worker()
   local cache, err = kong_cache.new {
     cluster_events    = cluster_events,
     worker_events     = worker_events,
+    -- db_update_propagation ：同上
     propagation_delay = kong.configuration.db_update_propagation,
+    -- db_cache_ttl ：缓存数据库实体的时间（包括缓存命中或者穿透），
+    -- 该存活时间是一种保护措施，以防 kong 节点漏掉处理缓存无效事件，
+    -- 避免旧数据长时间没有被清理。当缓存生存时间到了，缓存值将会被清理掉，
+    -- 下一次将会从数据库读取数据并再次缓存起来。
     ttl               = kong.configuration.db_cache_ttl,
     neg_ttl           = kong.configuration.db_cache_ttl,
     resurrect_ttl     = kong.configuration.resurrect_ttl,
@@ -301,6 +289,7 @@ function Kong.init_worker()
     return
   end
 
+  -- 在缓存中设置 router:version
   local ok, err = cache:get("router:version", { ttl = 0 }, function()
     return "init"
   end)
@@ -309,6 +298,7 @@ function Kong.init_worker()
     return
   end
 
+  -- 在缓存中设置 api_router:version
   local ok, err = cache:get("api_router:version", { ttl = 0 }, function()
     return "init"
   end)
