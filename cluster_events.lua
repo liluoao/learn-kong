@@ -145,6 +145,7 @@ function _M.new(opts)
 end
 
 
+-- 往cluster_events表中新增一条记录
 function _M:broadcast(channel, data, nbf)
   if type(channel) ~= "string" then
     return nil, "channel must be a string"
@@ -172,6 +173,7 @@ function _M:broadcast(channel, data, nbf)
 end
 
 
+-- 开启一个定时器，定时查询出cluster_events表中新增的记录
 function _M:subscribe(channel, cb, start_polling)
   if type(channel) ~= "string" then
     return error("channel must be a string")
