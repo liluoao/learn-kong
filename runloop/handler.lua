@@ -47,13 +47,16 @@ local api_router, api_router_version, api_router_err
 local server_header = meta._SERVER_TOKENS
 
 
+-- 当前时间
 local function get_now()
   update_time()
   return ngx_now() * 1000 -- time is kept in seconds with millisecond resolution.
 end
 
 
+-- 构造API
 local function build_api_router(dao, version)
+  -- 从DB取出所有
   local apis, err = dao.apis:find_all()
   if err then
     return nil, "could not load APIs: " .. err
@@ -66,10 +69,12 @@ local function build_api_router(dao, version)
     end
   end
 
+  --按时间排序
   sort(apis, function(api_a, api_b)
     return api_a.created_at < api_b.created_at
   end)
 
+  -- 调用api_router.lua中的new
   api_router, err = ApiRouter.new(apis)
   if not api_router then
     return nil, "could not create api router: " .. err
@@ -83,14 +88,18 @@ local function build_api_router(dao, version)
 end
 
 
+-- 构造路由
 local function build_router(db, version)
   local routes, i = {}, 0
   local routes_iterator = db.routes:each()
 
   local route, err = routes_iterator()
+  -- 循环取每个路由
   while route do
+    -- 关联的服务ID
     local service_pk = route.service
 
+    -- 没有关联直接返回
     if not service_pk then
       return nil, "route (" .. route.id .. ") is not associated with service"
     end
@@ -98,6 +107,7 @@ local function build_router(db, version)
     local service
 
     -- TODO: db requests in loop, problem or not
+    -- 根据ID查出对应服务
     service, err = db.services:select(service_pk)
     if not service then
       return nil, "could not find service for route (" .. route.id .. "): " .. err
@@ -125,6 +135,7 @@ local function build_router(db, version)
     return nil, "could not load routes: " .. err
   end
 
+  --根据regex_priority字段排序，没有就默认按创建时间
   sort(routes, function(r1, r2)
     r1, r2 = r1.route, r2.route
     if r1.regex_priority == r2.regex_priority then
@@ -133,6 +144,7 @@ local function build_router(db, version)
     return r1.regex_priority > r2.regex_priority
   end)
 
+  --调用router.lua中的new
   router, err = Router.new(routes)
   if not router then
     return nil, "could not create router: " .. err
@@ -154,8 +166,10 @@ return {
   build_router     = build_router,
   build_api_router = build_api_router,
 
+  -- 在入口的init_worker调用
   init_worker = {
     before = function()
+      -- 调用reports.lua中的init_worker
       reports.init_worker()
 
       -- initialize local local_events hooks
@@ -167,9 +181,10 @@ return {
 
 
       -- events dispatcher
+      -- 事件分发
 
 
-      -- dao:crud 方法
+      -- 数据库的增删改查事件
       worker_events.register(function(data)
         if not data.new_db then
           if not data.schema then
@@ -229,14 +244,17 @@ return {
 
 
       -- local events (same worker)
+      -- 本地事件（同进程）
 
-      -- 刷新API缓存
+      -- API的增删改查
+      -- 此时需要刷新API缓存
       worker_events.register(function()
         log(DEBUG, "[events] API updated, invalidating API router")
         cache:invalidate("api_router:version")
       end, "crud", "apis")
 
 
+      -- 路由的增删改查
       -- 刷新路由缓存
       worker_events.register(function()
         log(DEBUG, "[events] Route updated, invalidating router")
@@ -244,8 +262,13 @@ return {
       end, "crud", "routes")
 
 
-      -- 刷新服务缓存
+      -- 服务的增删改查
+      -- 刷新服务的路由缓存
       worker_events.register(function(data)
+        -- 只有当不是新增和删除操作时才需要更新路由
+        -- 因为新增时服务还是空的，下面没有路由
+        -- 删除时只有没有路由时才能删除
+        -- 所以排除这2种
         if data.operation ~= "create" and
            data.operation ~= "delete"
         then
@@ -290,13 +313,16 @@ return {
 
 
       -- target updates
+      -- 最终调用runloop/balancer.lua的on_target_event方法
 
 
       -- worker_events local handler: event received from DAO
+      -- 负载目标的增删改查
       worker_events.register(function(data)
         local operation = data.operation
         local target = data.entity
         -- => to worker_events node handler
+        -- 见下方广播进程事件
         local ok, err = worker_events.post("balancer", "targets", {
           operation = data.operation,
           entity = data.entity,
@@ -306,6 +332,7 @@ return {
               operation, " to workers: ", err)
         end
         -- => to cluster_events handler
+        -- 见下方广播集群事件
         local key = fmt("%s:%s", operation, target.upstream_id)
         ok, err = cluster_events:broadcast("balancer:targets", key)
         if not ok then
@@ -315,19 +342,23 @@ return {
 
 
       -- worker_events node handler
+      -- 广播进程事件
       worker_events.register(function(data)
         local operation = data.operation
         local target = data.entity
 
         -- => to balancer update
+        -- 调用runloop/balancer.lua的on_target_event
         balancer.on_target_event(operation, target)
       end, "balancer", "targets")
 
 
       -- cluster_events handler
+      -- 广播集群事件
       cluster_events:subscribe("balancer:targets", function(data)
         local operation, key = unpack(utils.split(data, ":"))
         -- => to worker_events node handler
+        -- 同样转给进程事件
         local ok, err = worker_events.post("balancer", "targets", {
           operation = operation,
           entity = {
@@ -354,6 +385,7 @@ return {
 
 
       -- upstream updates
+      -- 最终调用runloop/balancer.lua中的on_upstream_event方法
 
 
       -- worker_events local handler: event received from DAO
@@ -361,6 +393,7 @@ return {
         local operation = data.operation
         local upstream = data.entity
         -- => to worker_events node handler
+        -- 调用下面的进程事件balancer:upstreams
         local ok, err = worker_events.post("balancer", "upstreams", {
           operation = data.operation,
           entity = data.entity,
@@ -379,6 +412,7 @@ return {
 
 
       -- worker_events node handler
+      -- 进程事件balancer:upstreams
       worker_events.register(function(data)
         local operation = data.operation
         local upstream = data.entity
@@ -391,6 +425,7 @@ return {
       cluster_events:subscribe("balancer:upstreams", function(data)
         local operation, id, name = unpack(utils.split(data, ":"))
         -- => to worker_events node handler
+        -- 调用上面的进程事件balancer:upstreams
         local ok, err = worker_events.post("balancer", "upstreams", {
           operation = operation,
           entity = {
