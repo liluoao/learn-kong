@@ -169,6 +169,7 @@ return {
       -- events dispatcher
 
 
+      -- dao:crud 方法
       worker_events.register(function(data)
         if not data.new_db then
           if not data.schema then
@@ -229,20 +230,21 @@ return {
 
       -- local events (same worker)
 
-      -- API 有更新，删除缓存中指定键，再次请求时会判断，不同时刷新缓存
+      -- 刷新API缓存
       worker_events.register(function()
         log(DEBUG, "[events] API updated, invalidating API router")
         cache:invalidate("api_router:version")
       end, "crud", "apis")
 
 
-      -- 路由有更新，删除缓存中指定键，再次请求时会判断，不同时刷新缓存
+      -- 刷新路由缓存
       worker_events.register(function()
         log(DEBUG, "[events] Route updated, invalidating router")
         cache:invalidate("router:version")
       end, "crud", "routes")
 
 
+      -- 刷新服务缓存
       worker_events.register(function(data)
         if data.operation ~= "create" and
            data.operation ~= "delete"
@@ -269,6 +271,7 @@ return {
       end, "crud", "snis")
 
 
+      -- 刷新证书缓存
       worker_events.register(function(data)
         log(DEBUG, "[events] SSL cert updated, invalidating cached certificates")
         local certificate = data.entity
