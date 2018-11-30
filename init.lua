@@ -563,6 +563,7 @@ function Kong.handle_error()
   return kong_error_handlers(ngx)
 end
 
+-- 后台管理API
 function Kong.serve_admin_api(options)
   options = options or {}
 
@@ -575,6 +576,7 @@ function Kong.serve_admin_api(options)
     return ngx.exit(204)
   end
 
+  -- 见/api/init.lua
   return lapis.serve("kong.api")
 end
 
