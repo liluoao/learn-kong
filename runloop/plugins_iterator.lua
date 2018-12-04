@@ -14,6 +14,7 @@ local function load_plugin_into_memory(route_id,
                                        consumer_id,
                                        plugin_name,
                                        api_id)
+  -- 根据名字 路由ID 服务ID 消费者ID APIID查出所有插件配置
   local rows, err = kong.dao.plugins:find_all {
              name = plugin_name,
          route_id = route_id,
@@ -27,6 +28,7 @@ local function load_plugin_into_memory(route_id,
 
   if #rows > 0 then
     for _, row in ipairs(rows) do
+      -- 返回 路由ID 服务ID 消费者ID APIID全一致的
       if    route_id == row.route_id    and
           service_id == row.service_id  and
          consumer_id == row.consumer_id and
@@ -52,6 +54,7 @@ local function load_plugin_configuration(route_id,
                                          consumer_id,
                                          plugin_name,
                                          api_id)
+  -- 缓存键格式  名字:路由ID:服务ID:消费者ID:APIID
   local plugin_cache_key = kong.dao.plugins:cache_key(plugin_name,
                                                             route_id,
                                                             service_id,
